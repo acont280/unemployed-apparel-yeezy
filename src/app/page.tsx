@@ -4,7 +4,7 @@ import { HomeCarousel } from "@/components/HomeCarousel";
 export const revalidate = 0;
 
 export default async function HomePage() {
-  let products;
+  let products: Awaited<ReturnType<typeof getProducts>> = [];
   let error = false;
 
   try {
