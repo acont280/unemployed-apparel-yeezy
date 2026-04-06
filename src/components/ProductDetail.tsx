@@ -50,17 +50,6 @@ export function ProductDetail({ product }: { product: Product }) {
     container.scrollTo({ left: index * container.offsetWidth, behavior: "smooth" });
   };
 
-      addItem({
-      productId: product.id,
-      variantId: selectedVariant.id,
-      title: product.title,
-      variantTitle: selectedVariant.title,
-      price: selectedVariant.price,
-      quantity: 1,
-      image: product.images[0] ?? "",
-    });
-    setAdded(true);
-    setTimeout(() => setAdded(false), 2000);
   const handleAdd = () => {
     if (!note.trim()) {
       setNoteError(true);
@@ -139,7 +128,7 @@ export function ProductDetail({ product }: { product: Product }) {
             ))}
           </div>
         </div>
-      <div className="mb-6">
+        <div className="mb-6">
           <p className="font-mono text-[10px] tracking-[0.3em] text-muted mb-3">ENTER YOUR CASHAPP/ZELLE/PAYPAL URL</p>
           <p className="font-mono text-[10px] text-muted mb-2">Ex: cash.app/xxxxx</p>
           <input type="text" value={note} onChange={(e) => { setNote(e.target.value); setNoteError(false); }}
