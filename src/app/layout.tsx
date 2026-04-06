@@ -6,6 +6,10 @@ import { CartProvider } from "@/components/CartProvider";
 export const metadata: Metadata = {
   title: "UNEMPLOYED",
   description: "Apparel for the professionally idle.",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
