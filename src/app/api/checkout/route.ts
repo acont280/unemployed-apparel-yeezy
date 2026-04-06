@@ -15,17 +15,9 @@ interface CheckoutItem {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const {
-      items,
-      shippingCost,
-      discountAmount,
-      discountCode,
-      customerEmail,
-    }: {
+    const { items, shippingCost, customerEmail }: {
       items: CheckoutItem[];
       shippingCost: number;
-      discountAmount: number;
-      discountCode: string;
       customerEmail?: string;
     } = body;
 
@@ -33,33 +25,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No items" }, { status: 400 });
     }
 
-    // Verify prices server-side against Printify
-    const lineItems = await Promise.all(
-      items.map(async (item) => {
-        const product = await getProduct(item.productId);
-        const variant = product.variants.find((v) => v.id === item.variantId);
-        const verifiedPrice = variant?.price ?? item.price;
+    const lineItems: Array<{
+      price_data: {
+        currency: string;
+        product_data: { name: string; description?: string; images?: string[] };
+        unit_amount: number;
+      };
+      quantity: number;
+    }> = [];
 
-        return {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: item.title,
-              description: item.variantTitle,
-              images: item.image ? [item.image] : [],
-              metadata: {
-                productId: item.productId,
-                variantId: item.variantId.toString(),
-              },
-            },
-            unit_amount: verifiedPrice,
+    for (const item of items) {
+      const product = await getProduct(item.productId);
+      const variant = product.variants.find((v) => v.id === item.variantId);
+      const verifiedPrice = variant?.price ?? item.price;
+
+      lineItems.push({
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: item.title,
+            description: item.variantTitle,
+            images: item.image ? [item.image] : [],
           },
-          quantity: item.quantity,
-        };
-      })
-    );
+          unit_amount: verifiedPrice,
+        },
+        quantity: item.quantity,
+      });
+    }
 
-    // Add shipping as a line item
     if (shippingCost > 0) {
       lineItems.push({
         price_data: {
@@ -67,8 +60,6 @@ export async function POST(req: NextRequest) {
           product_data: {
             name: "Shipping",
             description: "Standard shipping",
-            images: [],
-            metadata: {},
           },
           unit_amount: shippingCost,
         },
@@ -76,7 +67,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Build Stripe checkout session
     const sessionParams: Record<string, unknown> = {
       mode: "payment",
       payment_method_types: ["card"],
@@ -84,8 +74,8 @@ export async function POST(req: NextRequest) {
       shipping_address_collection: {
         allowed_countries: ["US", "CA", "GB", "AU"],
       },
-      success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/checkout`,
+      success_url: process.env.NEXT_PUBLIC_BASE_URL + "/success?session_id={CHECKOUT_SESSION_ID}",
+      cancel_url: process.env.NEXT_PUBLIC_BASE_URL + "/checkout",
       metadata: {
         items: JSON.stringify(
           items.map((i) => ({
@@ -94,25 +84,11 @@ export async function POST(req: NextRequest) {
             quantity: i.quantity,
           }))
         ),
-        discountCode: discountCode || "",
-        discountAmount: discountAmount?.toString() || "0",
       },
-      automatic_tax: { enabled: false },
     };
 
     if (customerEmail) {
       sessionParams.customer_email = customerEmail;
-    }
-
-    // Apply discount
-    if (discountAmount > 0) {
-      const coupon = await stripe.coupons.create({
-        amount_off: discountAmount,
-        currency: "usd",
-        duration: "once",
-        name: discountCode || "Discount",
-      });
-      sessionParams.discounts = [{ coupon: coupon.id }];
     }
 
     const session = await stripe.checkout.sessions.create(
