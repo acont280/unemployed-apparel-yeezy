@@ -34,10 +34,10 @@ export async function POST(req: NextRequest) {
       quantity: number;
     }> = [];
 
-    for (const item of items) {
-      const product = await getProduct(item.productId);
+          const product = await getProduct(item.productId);
       const variant = product.variants.find((v) => v.id === item.variantId);
-      const verifiedPrice = variant?.price ?? item.price;
+      const verifiedPrice = variant?.price ?? item.price;for (const item of items) {
+      const verifiedPrice = item.price;
 
       lineItems.push({
         price_data: {
