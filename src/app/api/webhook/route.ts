@@ -5,6 +5,12 @@ import { createOrder } from "@/lib/printify";
 import { sendOrderConfirmation } from "@/lib/email";
 import Stripe from "stripe";
 
+interface OrderItem {
+  productId: string;
+  variantId: number;
+  quantity: number;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
@@ -27,74 +33,58 @@ export async function POST(req: NextRequest) {
   }
 
   if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
+    const rawSession = event.data.object as Stripe.Checkout.Session;
 
     try {
-      // Parse order items from metadata
-      const items = JSON.parse(session.metadata?.items || "[]");
-      const discountCode = session.metadata?.discountCode || "";
-      const discountAmount = parseInt(session.metadata?.discountAmount || "0");
+      const session = await stripe.checkout.sessions.retrieve(rawSession.id, {
+        expand: ["shipping_details", "customer_details", "line_items"],
+      });
 
-      // Get shipping details from Stripe
+      const items: OrderItem[] = JSON.parse(session.metadata?.items || "[]");
       const shipping = session.shipping_details;
-      const customerEmail =
-        session.customer_details?.email || session.customer_email || "";
+      const customerEmail = session.customer_details?.email || "";
       const customerName = session.customer_details?.name || "Customer";
+      const orderId = "UA-" + Date.now().toString(36).toUpperCase();
 
-      // Generate order ID
-      const orderId = `UA-${Date.now().toString(36).toUpperCase()}`;
-
-      // 1. Save order to Supabase
       const supabase = createServerClient();
       const { error: dbError } = await supabase.from("orders").insert({
         order_id: orderId,
         stripe_session_id: session.id,
-        stripe_payment_intent: session.payment_intent,
+        stripe_payment_intent: session.payment_intent as string,
         customer_email: customerEmail,
         customer_name: customerName,
         items: items,
-        subtotal: session.amount_subtotal,
+        subtotal: session.amount_subtotal || 0,
         shipping_cost: session.total_details?.amount_shipping || 0,
         tax: session.total_details?.amount_tax || 0,
-        discount_code: discountCode,
-        discount_amount: discountAmount,
-        total: session.amount_total,
-        shipping_address: shipping?.address
-          ? {
-              name: shipping.name,
-              address1: shipping.address.line1,
-              address2: shipping.address.line2,
-              city: shipping.address.city,
-              region: shipping.address.state,
-              zip: shipping.address.postal_code,
-              country: shipping.address.country,
-            }
-          : null,
+        total: session.amount_total || 0,
+        shipping_address: shipping?.address ? {
+          name: shipping.name,
+          address1: shipping.address.line1,
+          address2: shipping.address.line2,
+          city: shipping.address.city,
+          region: shipping.address.state,
+          zip: shipping.address.postal_code,
+          country: shipping.address.country,
+        } : null,
         status: "paid",
       });
 
-      if (dbError) {
-        console.error("Failed to save order to Supabase:", dbError);
-      }
+      if (dbError) console.error("Supabase error:", dbError);
 
-      // 2. Send order to Printify
       if (shipping?.address) {
         try {
-          const printifyLineItems = items.map(
-            (item: { productId: string; variantId: number; quantity: number }) => ({
-              product_id: item.productId,
-              variant_id: item.variantId,
-              quantity: item.quantity,
-            })
-          );
+          const printifyItems = items.map((item) => ({
+            product_id: item.productId,
+            variant_id: item.variantId,
+            quantity: item.quantity,
+          }));
 
           const nameParts = (shipping.name || "Customer").split(" ");
-          const firstName = nameParts[0] || "Customer";
-          const lastName = nameParts.slice(1).join(" ") || "";
 
-          await createOrder(orderId, printifyLineItems, {
-            first_name: firstName,
-            last_name: lastName,
+          await createOrder(orderId, printifyItems, {
+            first_name: nameParts[0] || "Customer",
+            last_name: nameParts.slice(1).join(" ") || "",
             email: customerEmail,
             country: shipping.address.country || "US",
             region: shipping.address.state || "",
@@ -104,15 +94,12 @@ export async function POST(req: NextRequest) {
             zip: shipping.address.postal_code || "",
           });
 
-          // Update order status in Supabase
           await supabase
             .from("orders")
             .update({ status: "sent_to_printify" })
             .eq("order_id", orderId);
-
-          console.log(`Order ${orderId} sent to Printify`);
         } catch (printifyError) {
-          console.error("Failed to send order to Printify:", printifyError);
+          console.error("Printify error:", printifyError);
           await supabase
             .from("orders")
             .update({ status: "printify_failed" })
@@ -120,13 +107,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 3. Send confirmation email
       try {
-        // Fetch line item details from Stripe for the email
-        const lineItems = await stripe.checkout.sessions.listLineItems(
-          session.id
-        );
-
+        const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
         const emailItems = lineItems.data
           .filter((li) => li.description !== "Shipping")
           .map((li) => ({
@@ -153,16 +135,13 @@ export async function POST(req: NextRequest) {
           },
         });
       } catch (emailError) {
-        console.error("Failed to send confirmation email:", emailError);
+        console.error("Email error:", emailError);
       }
 
-      console.log(`Order ${orderId} processed successfully`);
+      console.log("Order " + orderId + " processed");
     } catch (error) {
-      console.error("Error processing webhook:", error);
-      return NextResponse.json(
-        { error: "Webhook processing failed" },
-        { status: 500 }
-      );
+      console.error("Webhook processing error:", error);
+      return NextResponse.json({ error: "Processing failed" }, { status: 500 });
     }
   }
 
