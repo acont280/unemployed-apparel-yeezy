@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
+    const rawSession = event.data.object as Stripe.Checkout.Session;
+    const session = await stripe.checkout.sessions.retrieve(rawSession.id);
 
     try {
       const items: OrderItem[] = JSON.parse(session.metadata?.items || "[]");
