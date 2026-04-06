@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const session = await stripe.checkout.sessions.retrieve(rawSession.id, {
-        expand: ["shipping_details", "customer_details", "line_items"],
+        expand: ["shipping_details", "line_items"],
       });
 
       const items: OrderItem[] = JSON.parse(session.metadata?.items || "[]");
