@@ -9,6 +9,7 @@ interface OrderItem {
   productId: string;
   variantId: number;
   quantity: number;
+  note?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -28,18 +29,14 @@ export async function POST(req: NextRequest) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch (err) {
-    console.error("Webhook signature verification failed:", err);
+    console.error("Webhook sig error:", err);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
   if (event.type === "checkout.session.completed") {
-    const rawSession = event.data.object as Stripe.Checkout.Session;
+    const session = event.data.object as Stripe.Checkout.Session;
 
     try {
-      const session = await stripe.checkout.sessions.retrieve(rawSession.id, {
-        expand: ["shipping_details", "line_items"],
-      });
-
       const items: OrderItem[] = JSON.parse(session.metadata?.items || "[]");
       const shipping = session.shipping_details;
       const customerEmail = session.customer_details?.email || "";
@@ -47,7 +44,7 @@ export async function POST(req: NextRequest) {
       const orderId = "UA-" + Date.now().toString(36).toUpperCase();
 
       const supabase = createServerClient();
-      const { error: dbError } = await supabase.from("orders").insert({
+      await supabase.from("orders").insert({
         order_id: orderId,
         stripe_session_id: session.id,
         stripe_payment_intent: session.payment_intent as string,
@@ -69,8 +66,6 @@ export async function POST(req: NextRequest) {
         } : null,
         status: "paid",
       });
-
-      if (dbError) console.error("Supabase error:", dbError);
 
       if (shipping?.address) {
         try {
@@ -147,4 +142,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ received: true });
 }
-
