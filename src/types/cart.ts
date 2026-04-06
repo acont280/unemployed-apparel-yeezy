@@ -3,9 +3,10 @@ export interface CartItem {
   variantId: number;
   title: string;
   variantTitle: string;
-  price: number; // cents
+  price: number;
   quantity: number;
   image: string;
+  note: string;
 }
 
 export interface Cart {

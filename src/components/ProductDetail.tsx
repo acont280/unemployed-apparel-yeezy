@@ -29,6 +29,8 @@ export function ProductDetail({ product }: { product: Product }) {
   );
   const [currentImage, setCurrentImage] = useState(0);
   const [added, setAdded] = useState(false);
+  const [note, setNote] = useState("");
+  const [noteError, setNoteError] = useState(false);
   const { addItem } = useCart();
   const imageScrollRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +50,23 @@ export function ProductDetail({ product }: { product: Product }) {
     container.scrollTo({ left: index * container.offsetWidth, behavior: "smooth" });
   };
 
+      addItem({
+      productId: product.id,
+      variantId: selectedVariant.id,
+      title: product.title,
+      variantTitle: selectedVariant.title,
+      price: selectedVariant.price,
+      quantity: 1,
+      image: product.images[0] ?? "",
+    });
+    setAdded(true);
+    setTimeout(() => setAdded(false), 2000);
   const handleAdd = () => {
+    if (!note.trim()) {
+      setNoteError(true);
+      return;
+    }
+    setNoteError(false);
     addItem({
       productId: product.id,
       variantId: selectedVariant.id,
@@ -57,6 +75,7 @@ export function ProductDetail({ product }: { product: Product }) {
       price: selectedVariant.price,
       quantity: 1,
       image: product.images[0] ?? "",
+      note: note.trim(),
     });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
@@ -119,6 +138,14 @@ export function ProductDetail({ product }: { product: Product }) {
               </button>
             ))}
           </div>
+        </div>
+      <div className="mb-6">
+          <p className="font-mono text-[10px] tracking-[0.3em] text-muted mb-3">ENTER YOUR CASHAPP/ZELLE/PAYPAL URL</p>
+          <p className="font-mono text-[10px] text-muted mb-2">Ex: cash.app/xxxxx</p>
+          <input type="text" value={note} onChange={(e) => { setNote(e.target.value); setNoteError(false); }}
+            placeholder="cash.app/yourname"
+            className={"w-full bg-transparent border px-3 py-2.5 font-mono text-xs focus:outline-none focus:border-ink " + (noteError ? "border-red-500" : "border-faint")} />
+          {noteError && <p className="font-mono text-[10px] text-red-500 mt-1">Required to complete your order</p>}
         </div>
         <button onClick={handleAdd} disabled={!selectedVariant.isAvailable}
           className={"w-full py-4 font-mono text-xs tracking-[0.3em] transition-all duration-200 " + (added ? "bg-ink text-surface" : selectedVariant.isAvailable ? "bg-ink text-surface hover:bg-black" : "bg-faint text-muted cursor-not-allowed")}>
