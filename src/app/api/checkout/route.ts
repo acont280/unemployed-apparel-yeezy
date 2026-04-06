@@ -9,6 +9,7 @@ interface CheckoutItem {
   price: number;
   quantity: number;
   image: string;
+  note: string;
 }
 
 interface LineItem {
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
           currency: "usd",
           product_data: {
             name: item.title,
-            description: item.variantTitle,
+            description: item.variantTitle + (item.note ? " | " + item.note : ""),
           },
           unit_amount: item.price,
         },
@@ -66,6 +67,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const notes = items.map((i) => i.title + ": " + (i.note || "none")).join(" | ");
+
     const sessionConfig: Record<string, unknown> = {
       mode: "payment",
       payment_method_types: ["card"],
@@ -81,8 +84,10 @@ export async function POST(req: NextRequest) {
             productId: i.productId,
             variantId: i.variantId,
             quantity: i.quantity,
+            note: i.note || "",
           }))
         ),
+        customer_notes: notes,
       },
     };
 
