@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=Inter:wght@300;400;500&display=swap");
+
+:root {
+  --font-mono: "DM Mono", monospace;
+  --font-sans: "Inter", -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: #F2F0ED;
+  color: #1A1A1A;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Hide scrollbar but keep scroll functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Snap scroll for product carousel */
+.snap-container {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.snap-item {
+  scroll-snap-align: start;
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade {
+  animation: fadeIn 0.8s ease forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.6s ease forwards;
+  opacity: 0;
+}
+
+/* Size button reset */
+.size-btn {
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* Minimal selection style */
+::selection {
+  background: #1A1A1A;
+  color: #F2F0ED;
+}
+
+/* No scroll on body when cart open */
+.no-scroll {
+  overflow: hidden;
+}
