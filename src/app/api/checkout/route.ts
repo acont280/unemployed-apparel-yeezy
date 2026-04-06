@@ -11,6 +11,18 @@ interface CheckoutItem {
   image: string;
 }
 
+interface LineItem {
+  price_data: {
+    currency: string;
+    product_data: {
+      name: string;
+      description: string;
+    };
+    unit_amount: number;
+  };
+  quantity: number;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -24,28 +36,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No items" }, { status: 400 });
     }
 
-    const lineItems: Array<{
-      price_data: {
-        currency: string;
-        product_data: { name: string; description?: string; images?: string[] };
-        unit_amount: number;
-      };
-      quantity: number;
-    }> = [];
+    const lineItems: LineItem[] = [];
 
-                const variant = product.variants.find((v) => v.id === item.variantId);
-      const verifiedPrice = variant?.price ?? item.price;for (const item of items) {
-      const verifiedPrice = item.price;
-
+    for (const item of items) {
       lineItems.push({
         price_data: {
           currency: "usd",
           product_data: {
             name: item.title,
             description: item.variantTitle,
-            images: item.image ? [item.image] : [],
           },
-          unit_amount: verifiedPrice,
+          unit_amount: item.price,
         },
         quantity: item.quantity,
       });
@@ -65,15 +66,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const sessionParams: Record<string, unknown> = {
+    const sessionConfig: Record<string, unknown> = {
       mode: "payment",
       payment_method_types: ["card"],
       line_items: lineItems,
       shipping_address_collection: {
         allowed_countries: ["US", "CA", "GB", "AU"],
       },
-      success_url: process.env.NEXT_PUBLIC_BASE_URL + "/success?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: process.env.NEXT_PUBLIC_BASE_URL + "/checkout",
+      success_url: (process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3002") + "/success?session_id={CHECKOUT_SESSION_ID}",
+      cancel_url: (process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3002") + "/checkout",
       metadata: {
         items: JSON.stringify(
           items.map((i) => ({
@@ -86,16 +87,16 @@ export async function POST(req: NextRequest) {
     };
 
     if (customerEmail) {
-      sessionParams.customer_email = customerEmail;
+      sessionConfig.customer_email = customerEmail;
     }
 
     const session = await stripe.checkout.sessions.create(
-      sessionParams as Parameters<typeof stripe.checkout.sessions.create>[0]
+      sessionConfig as Parameters<typeof stripe.checkout.sessions.create>[0]
     );
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("Checkout error:", error);
+    console.error("Checkout error:", error instanceof Error ? error.message : error);
     return NextResponse.json(
       { error: "Failed to create checkout session" },
       { status: 500 }
