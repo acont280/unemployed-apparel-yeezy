@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
-import { getProduct } from "@/lib/printify";
 
 interface CheckoutItem {
   productId: string;
@@ -34,8 +33,7 @@ export async function POST(req: NextRequest) {
       quantity: number;
     }> = [];
 
-          const product = await getProduct(item.productId);
-      const variant = product.variants.find((v) => v.id === item.variantId);
+                const variant = product.variants.find((v) => v.id === item.variantId);
       const verifiedPrice = variant?.price ?? item.price;for (const item of items) {
       const verifiedPrice = item.price;
 
