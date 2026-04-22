@@ -55,10 +55,11 @@ export interface Product {
   title: string;
   description: string;
   tags: string[];
-  price: number; // lowest enabled variant price in cents
-  images: string[]; // src URLs
+  price: number;
+  images: string[];
   variants: Variant[];
   options: ProductOption[];
+  variantImages?: { variantId: number; images: string[] }[];
 }
 
 export interface Variant {

@@ -71,8 +71,8 @@ export function ProductDetail({ product }: { product: Product }) {
         .map((v) => v.id)
     );
     const matched = product.variantImages
-      .filter((img) => img.variant_ids.some((vid) => colorVariantIds.has(vid)))
-      .map((img) => img.src);
+      .filter((img) => colorVariantIds.has(img.variantId))
+      .map((img) => img.images).flat();
     return matched.length > 0 ? matched : product.images;
   }, [product, selectedColor, hasColors]);
 
