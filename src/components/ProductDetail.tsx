@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "@/types/printify";
@@ -9,23 +9,75 @@ import { formatPrice } from "@/lib/utils";
 
 export function ProductDetail({ product }: { product: Product }) {
   const sizeOrder = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"];
-  const sortedVariants = [...product.variants].sort((a, b) => {
-    const getSize = (title: string) => {
-      const sizes = ["XS","S","M","L","XL","2XL","3XL","4XL","5XL"];
-      const parts = title.split(" / ");
-      for (const p of parts) { if (sizes.includes(p.trim())) return p.trim(); }
-      return parts[parts.length - 1].trim();
-    };
-    const aIdx = sizeOrder.indexOf(getSize(a.title));
-    const bIdx = sizeOrder.indexOf(getSize(b.title));
-    if (aIdx === -1 && bIdx === -1) return 0;
-    if (aIdx === -1) return 1;
-    if (bIdx === -1) return -1;
-    return aIdx - bIdx;
-  });
+
+  // Parse color and size from variant title like "Black / S"
+  const getColor = (title: string) => {
+    const parts = title.split(" / ");
+    if (parts.length >= 2) {
+      const last = parts[parts.length - 1].trim();
+      if (sizeOrder.includes(last)) return parts.slice(0, -1).join(" / ").trim();
+    }
+    return "";
+  };
+
+  const getSize = (title: string) => {
+    const parts = title.split(" / ");
+    for (const p of parts) {
+      if (sizeOrder.includes(p.trim())) return p.trim();
+    }
+    return parts[parts.length - 1].trim();
+  };
+
+  // Extract unique colors preserving order
+  const colors = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const v of product.variants) {
+      const c = getColor(v.title);
+      if (c && !seen.has(c)) {
+        seen.add(c);
+        result.push(c);
+      }
+    }
+    return result;
+  }, [product.variants]);
+
+  const hasColors = colors.length > 1;
+
+  const [selectedColor, setSelectedColor] = useState(colors[0] ?? "");
+
+  // Filter variants by selected color, then sort by size
+  const filteredVariants = useMemo(() => {
+    const variants = hasColors
+      ? product.variants.filter((v) => getColor(v.title) === selectedColor)
+      : product.variants;
+
+    return [...variants].sort((a, b) => {
+      const aIdx = sizeOrder.indexOf(getSize(a.title));
+      const bIdx = sizeOrder.indexOf(getSize(b.title));
+      if (aIdx === -1 && bIdx === -1) return 0;
+      if (aIdx === -1) return 1;
+      if (bIdx === -1) return -1;
+      return aIdx - bIdx;
+    });
+  }, [product.variants, selectedColor, hasColors]);
+
+  // Get images for the selected color by matching variant IDs
+  const colorImages = useMemo(() => {
+    if (!hasColors || !product.variantImages?.length) return product.images;
+    const colorVariantIds = new Set(
+      product.variants
+        .filter((v) => getColor(v.title) === selectedColor)
+        .map((v) => v.id)
+    );
+    const matched = product.variantImages
+      .filter((img) => img.variant_ids.some((vid) => colorVariantIds.has(vid)))
+      .map((img) => img.src);
+    return matched.length > 0 ? matched : product.images;
+  }, [product, selectedColor, hasColors]);
 
   const [selectedVariant, setSelectedVariant] = useState(
-    sortedVariants.find((v) => v.isAvailable) ?? sortedVariants[0]
+    filteredVariants.find((v) => v.isAvailable) ?? filteredVariants[0]
   );
   const [currentImage, setCurrentImage] = useState(0);
   const [added, setAdded] = useState(false);
@@ -33,6 +85,16 @@ export function ProductDetail({ product }: { product: Product }) {
   const [noteError, setNoteError] = useState(false);
   const { addItem } = useCart();
   const imageScrollRef = useRef<HTMLDivElement>(null);
+
+  // When color changes, reset selected variant and images
+  useEffect(() => {
+    const firstAvailable = filteredVariants.find((v) => v.isAvailable);
+    setSelectedVariant(firstAvailable ?? filteredVariants[0]);
+    setCurrentImage(0);
+    if (imageScrollRef.current) {
+      imageScrollRef.current.scrollTo({ left: 0 });
+    }
+  }, [selectedColor]);
 
   useEffect(() => {
     const container = imageScrollRef.current;
@@ -63,7 +125,7 @@ export function ProductDetail({ product }: { product: Product }) {
       variantTitle: selectedVariant.title,
       price: selectedVariant.price,
       quantity: 1,
-      image: product.images[0] ?? "",
+      image: colorImages[0] ?? product.images[0] ?? "",
       note: note.trim(),
     });
     setAdded(true);
@@ -71,9 +133,10 @@ export function ProductDetail({ product }: { product: Product }) {
   };
 
   const displaySize = (title: string) => {
-    const sizes = ["XS","S","M","L","XL","2XL","3XL","4XL","5XL"];
     const parts = title.split(" / ");
-    for (const p of parts) { if (sizes.includes(p.trim())) return p.trim(); }
+    for (const p of parts) {
+      if (sizeOrder.includes(p.trim())) return p.trim();
+    }
     return parts[0];
   };
 
@@ -84,9 +147,9 @@ export function ProductDetail({ product }: { product: Product }) {
       </div>
       <div className="relative">
         <div ref={imageScrollRef} className="flex overflow-x-auto snap-container hide-scrollbar">
-          {product.images.length > 0 ? (
-            product.images.map((img, i) => (
-              <div key={i} className="snap-item flex-shrink-0 w-screen flex items-center justify-center py-4 sm:py-8" style={{ height: "60vh" }}>
+          {colorImages.length > 0 ? (
+            colorImages.map((img, i) => (
+              <div key={`${selectedColor}-${i}`} className="snap-item flex-shrink-0 w-screen flex items-center justify-center py-4 sm:py-8" style={{ height: "60vh" }}>
                 <div className="relative w-[70vw] h-full sm:w-[45vw]">
                   <Image src={img} alt={product.title} fill className="object-contain" sizes="70vw" priority={i === 0} />
                 </div>
@@ -98,15 +161,15 @@ export function ProductDetail({ product }: { product: Product }) {
             </div>
           )}
         </div>
-        {product.images.length > 1 && currentImage > 0 && (
+        {colorImages.length > 1 && currentImage > 0 && (
           <button onClick={() => scrollToImage(currentImage - 1)} className="absolute left-4 top-1/2 -translate-y-1/2 font-mono text-xl text-muted hover:text-ink transition-colors">&larr;</button>
         )}
-        {product.images.length > 1 && currentImage < product.images.length - 1 && (
+        {colorImages.length > 1 && currentImage < colorImages.length - 1 && (
           <button onClick={() => scrollToImage(currentImage + 1)} className="absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xl text-muted hover:text-ink transition-colors">&rarr;</button>
         )}
-        {product.images.length > 1 && (
+        {colorImages.length > 1 && (
           <div className="flex justify-center gap-1.5 py-4">
-            {product.images.map((_, i) => (
+            {colorImages.map((_, i) => (
               <button key={i} onClick={() => scrollToImage(i)} className={"w-1 h-1 rounded-full transition-all duration-300 " + (i === currentImage ? "bg-ink w-4" : "bg-ink/15")} />
             ))}
           </div>
@@ -117,10 +180,34 @@ export function ProductDetail({ product }: { product: Product }) {
           <h1 className="font-mono text-sm tracking-[0.2em]">{product.title.toUpperCase()}</h1>
           <span className="font-mono text-sm">{formatPrice(selectedVariant.price)}</span>
         </div>
+
+        {/* Color selector - only shown when multiple colors exist */}
+        {hasColors && (
+          <div className="mb-8">
+            <p className="font-mono text-[10px] tracking-[0.3em] text-muted mb-4">SELECT COLOR</p>
+            <div className="grid grid-cols-4 sm:grid-cols-5 gap-px bg-faint">
+              {colors.map((color) => (
+                <button
+                  key={color}
+                  onClick={() => setSelectedColor(color)}
+                  className={
+                    "py-3 font-mono text-xs tracking-wider " +
+                    (color === selectedColor
+                      ? "bg-ink text-surface"
+                      : "bg-surface text-ink hover:bg-faint")
+                  }
+                >
+                  {color.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mb-8">
           <p className="font-mono text-[10px] tracking-[0.3em] text-muted mb-4">SELECT SIZE</p>
           <div className="grid grid-cols-4 sm:grid-cols-5 gap-px bg-faint">
-            {sortedVariants.map((v) => (
+            {filteredVariants.map((v) => (
               <button key={v.id} onClick={() => v.isAvailable && setSelectedVariant(v)} disabled={!v.isAvailable}
                 className={"size-btn py-3 font-mono text-xs tracking-wider " + (v.id === selectedVariant.id ? "bg-ink text-surface" : v.isAvailable ? "bg-surface text-ink hover:bg-faint" : "bg-surface text-ink/15 cursor-not-allowed line-through")}>
                 {displaySize(v.title)}
